@@ -13,13 +13,13 @@ import io
 try:
 	import numpy
 except:
-	print "Error : Requires numpy"
+	print("Error : Requires numpy")
 	sys.exit()
 
 try:
 	from tables import *
 except:
-	print "Error : Requires PyTables"
+	print("Error : Requires PyTables")
 	
 
 
@@ -48,7 +48,7 @@ class converter:
 			parent = parent._v_name
 			self.allGroups.append(name)
 			self.groupParentDict[parent].append(name)
-			self.groupContentsDict[name] = {}
+			self.groupContentsDict.setdefault(name, {})
 
 			for array in h5file.list_nodes(group, classname="Array"):
 				array_name = array._v_name
@@ -58,12 +58,12 @@ class converter:
 
 			for gp in h5file.list_nodes(group, classname="Group"):
 				gp_name = gp._v_name
-				gp_contents = {gp_name : self.groupContentsDict[gp_name]}
+				gp_contents = { gp_name : self.groupContentsDict.setdefault(gp_name, {}) }
 				self.groupContentsDict[name].update(gp_contents)
 
 			for table in h5file.list_nodes(group, classname="Table"):
 				table_name = table._v_name
-				table_contents = table.read()
+				table_contents = [dict(zip(table.colnames, vals)) for vals in table.read().tolist()]
 				table_info = {table_name : table_contents}
 				self.groupContentsDict[name].update(table_info)	
 
@@ -74,12 +74,12 @@ class converter:
 		When decoded the file contains a nested dictionary. 
 		The primary key is the root group '\'. 
 		"""
-		alpha = self.groupContentsDict
+		alpha = self.groupContentsDict["/"]
 
 		json_file_name = self.file_name + '.json' 
 		with io.open(json_file_name, 'w', encoding='utf-8') as f:
 			#record = json.dumps(alpha,cls=NumpyAwareJSONEncoder)
-			f.write(unicode(json.dumps(alpha, cls=NumpyAwareJSONEncoder, ensure_ascii=False)))
+			f.write(json.dumps(alpha, cls=NumpyAwareJSONEncoder, ensure_ascii=False))
 		f.close()
 		return 
 
@@ -115,8 +115,14 @@ class NumpyAwareJSONEncoder(json.JSONEncoder):
 	e.g. numpy arrays are not supported by the standard json encoder - dumps. 
 	"""
 	def default(self, obj):
-		if isinstance(obj, numpy.ndarray):
+		if isinstance(obj, numpy.integer):
+			return int(obj)
+		elif isinstance(obj, numpy.floating):
+			return float(obj)
+		elif isinstance(obj, numpy.ndarray):
 			return obj.tolist()
+		elif isinstance(obj, bytes):
+			return obj.decode("utf-8")
 		return json.JSONEncoder.default(self, obj)
 
 
@@ -124,10 +130,4 @@ class NumpyAwareJSONEncoder(json.JSONEncoder):
 
 json_data = converter(h5file)
 contents = json_data.jsonOutput() 
-
-
-
-
-
-
-
+h5file.close()
